@@ -1,0 +1,9 @@
+langgraph
+openai
+tavily-python
+duckdb
+google-genai
+streamlit
+python-dotenv
+asteval
+pytest
