@@ -1,6 +1,9 @@
+import argparse
 import sys
 
-from agent.graph import build_graph
+from openai import RateLimitError
+
+from agent.graph import AVAILABLE_MODELS, DEFAULT_MODEL, build_graph
 from agent.trace import stream_steps
 
 STEP_LABELS = {
@@ -30,12 +33,23 @@ def print_step(node_name: str, message: dict, step_number: int) -> None:
         print(f"[{step_number}] {label} answer: {message['content']}")
 
 
-def run_with_trace(app, question: str) -> None:
+def run_with_trace(app, question: str, model: str) -> None:
     step_number = 0
-    for node_name, new_messages, _ in stream_steps(app, question):
+    for node_name, new_messages, _ in stream_steps(app, question, model):
         for message in new_messages:
             step_number += 1
             print_step(node_name, message, step_number)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Agent CLI")
+    parser.add_argument(
+        "--model",
+        choices=AVAILABLE_MODELS,
+        default=DEFAULT_MODEL,
+        help=f"Groq model to use (default: {DEFAULT_MODEL})",
+    )
+    return parser.parse_args()
 
 
 def main() -> None:
@@ -43,8 +57,9 @@ def main() -> None:
     if reconfigure is not None:
         reconfigure(encoding="utf-8")
 
+    args = parse_args()
     app = build_graph()
-    print("Agent CLI. Type a question (exit / quit / ctrl+c to leave).")
+    print(f"Agent CLI. Model: {args.model}. Type a question (exit / quit / ctrl+c to leave).")
 
     while True:
         try:
@@ -59,7 +74,9 @@ def main() -> None:
             break
 
         try:
-            run_with_trace(app, question)
+            run_with_trace(app, question, args.model)
+        except RateLimitError:
+            print("Groq rate limit reached (free tier). Wait a bit and try again.")
         except Exception as exc:
             print(f"Error: {exc}")
 

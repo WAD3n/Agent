@@ -1,9 +1,11 @@
 from typing import Iterator
 
-from agent.graph import SYSTEM_PROMPT, AgentState
+from agent.graph import DEFAULT_MODEL, SYSTEM_PROMPT, AgentState
 
 
-def build_initial_state(question: str) -> AgentState:
+def build_initial_state(
+    question: str, model: str = DEFAULT_MODEL, forced_tool: str | None = None
+) -> AgentState:
     return {
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -12,12 +14,16 @@ def build_initial_state(question: str) -> AgentState:
         "steps": 0,
         "prompt_tokens": 0,
         "completion_tokens": 0,
+        "model": model,
+        "forced_tool": forced_tool,
     }
 
 
-def stream_steps(app, question: str) -> Iterator[tuple[str, list[dict], AgentState]]:
+def stream_steps(
+    app, question: str, model: str = DEFAULT_MODEL, forced_tool: str | None = None
+) -> Iterator[tuple[str, list[dict], AgentState]]:
     """Run the graph, yielding (node_name, new_messages, node_state) per super-step."""
-    state = build_initial_state(question)
+    state = build_initial_state(question, model, forced_tool)
     seen = len(state["messages"])
 
     for update in app.stream(state, stream_mode="updates"):

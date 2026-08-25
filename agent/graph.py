@@ -3,11 +3,26 @@ import os
 from typing import Any, TypedDict, cast
 
 from langgraph.graph import END, StateGraph
+from openai import BadRequestError
 
 from agent.llm_client import get_groq_client
 from agent.tool_registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
 
-MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+DEFAULT_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+MODEL = DEFAULT_MODEL  # kept for backwards compatibility (e.g. eval/judge.py)
+
+# Chat-capable models available on the free Groq tier for this account
+# (see `client.models.list()`; audio/prompt-guard models are excluded).
+AVAILABLE_MODELS = [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-safeguard-20b",
+    "qwen/qwen3.6-27b",
+    "groq/compound",
+    "groq/compound-mini",
+    "allam-2-7b",
+]
+
 MAX_STEPS = 5
 
 SYSTEM_PROMPT = (
@@ -22,6 +37,8 @@ class AgentState(TypedDict):
     steps: int
     prompt_tokens: int
     completion_tokens: int
+    model: str
+    forced_tool: str | None
 
 
 def _extract_usage(response) -> tuple[int, int]:
@@ -36,15 +53,32 @@ def reason(state: AgentState) -> AgentState:
     client = get_groq_client()
     force_final_answer = state["steps"] >= MAX_STEPS - 1
 
-    kwargs: dict = {"model": MODEL, "messages": cast(Any, state["messages"])}
+    model = state.get("model") or DEFAULT_MODEL
+    kwargs: dict = {"model": model, "messages": cast(Any, state["messages"])}
     if not force_final_answer:
         # Omit `tools` entirely when forcing a final answer: passing
         # tool_choice="none" alongside `tools` still lets the model attempt a
         # tool call on Groq, which the API then rejects with a 400.
         kwargs["tools"] = cast(Any, TOOL_SCHEMAS)
-        kwargs["tool_choice"] = "auto"
+        forced_tool = state.get("forced_tool")
+        if forced_tool and state["steps"] == 0:
+            # Only force on the first step — forcing on every step would
+            # make the agent call the same tool forever and never answer.
+            kwargs["tool_choice"] = {"type": "function", "function": {"name": forced_tool}}
+        else:
+            kwargs["tool_choice"] = "auto"
 
-    response = client.chat.completions.create(**kwargs)
+    try:
+        response = client.chat.completions.create(**kwargs)
+    except BadRequestError:
+        if kwargs.get("tool_choice") == "auto":
+            raise
+        # Forcing a specific tool isn't always honored by the model — Groq
+        # then rejects the response with a 400 ("tool choice is required,
+        # but model did not call a tool"). Retry once without forcing it.
+        kwargs["tool_choice"] = "auto"
+        response = client.chat.completions.create(**kwargs)
+
     message = response.choices[0].message
     prompt_tokens, completion_tokens = _extract_usage(response)
 
@@ -113,7 +147,7 @@ def build_graph():
     return graph.compile()
 
 
-def run_agent(question: str) -> AgentState:
+def run_agent(question: str, model: str = DEFAULT_MODEL, forced_tool: str | None = None) -> AgentState:
     app = build_graph()
     initial_state: AgentState = {
         "messages": [
@@ -123,5 +157,7 @@ def run_agent(question: str) -> AgentState:
         "steps": 0,
         "prompt_tokens": 0,
         "completion_tokens": 0,
+        "model": model,
+        "forced_tool": forced_tool,
     }
     return cast(AgentState, app.invoke(initial_state))

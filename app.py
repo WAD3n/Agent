@@ -1,9 +1,15 @@
 import streamlit as st
+from openai import RateLimitError
 
-from agent.graph import build_graph
+from agent.graph import AVAILABLE_MODELS, DEFAULT_MODEL, build_graph
 from agent.trace import stream_steps
 
 MAX_REQUESTS_PER_SESSION = 15
+FORCEABLE_TOOLS = {
+    "Auto (let the agent decide)": None,
+    "Force: web_search": "web_search",
+    "Force: calculator": "calculator",
+}
 
 st.set_page_config(page_title="AI Agent with Evaluation", page_icon="🤖")
 st.title("AI Agent with Evaluation")
@@ -38,13 +44,19 @@ def render_trace_step(node_name: str, message: dict) -> None:
         st.markdown(f"💬 **final answer drafted**")
 
 
-question = st.text_input("Your question", placeholder="e.g. What is 47 * 12?")
-ask_clicked = st.button("Ask", type="primary")
+col1, col2 = st.columns(2)
+with col1:
+    model = st.selectbox("Model", AVAILABLE_MODELS, index=AVAILABLE_MODELS.index(DEFAULT_MODEL))
+with col2:
+    tool_choice_label = st.selectbox("Tool usage", list(FORCEABLE_TOOLS.keys()))
+forced_tool = FORCEABLE_TOOLS[tool_choice_label]
 
-if ask_clicked:
-    if not question.strip():
-        st.warning("Type a question first.")
-    elif st.session_state.request_count >= MAX_REQUESTS_PER_SESSION:
+# st.chat_input auto-wraps long text and submits on Enter (unlike
+# st.text_input, which never wraps since it's a single-line <input>).
+question = st.chat_input("Ask a question, e.g. What is 47 * 12?")
+
+if question:
+    if st.session_state.request_count >= MAX_REQUESTS_PER_SESSION:
         st.error(f"Session limit reached ({MAX_REQUESTS_PER_SESSION} questions). Refresh the page to reset.")
     else:
         st.session_state.request_count += 1
@@ -55,10 +67,15 @@ if ask_clicked:
 
         with st.spinner("Thinking..."):
             try:
-                for node_name, new_messages, node_state in stream_steps(graph_app, question):
+                for node_name, new_messages, node_state in stream_steps(
+                    graph_app, question, model, forced_tool
+                ):
                     final_state = node_state
                     for message in new_messages:
                         trace.append((node_name, message))
+            except RateLimitError:
+                st.error("Groq rate limit reached (free tier). Wait a bit and try again.")
+                final_state = None
             except Exception as exc:
                 st.error(f"Error: {exc}")
                 final_state = None
