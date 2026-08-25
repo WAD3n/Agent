@@ -56,7 +56,7 @@ def main() -> None:
         reconfigure(encoding="utf-8")
 
     app = build_graph()
-    print("Agent CLI. Wpisz pytanie (exit / quit / ctrl+c aby wyjść).")
+    print("Agent CLI. Type a question (exit / quit / ctrl+c to leave).")
 
     while True:
         try:
@@ -73,7 +73,7 @@ def main() -> None:
         try:
             run_with_trace(app, question)
         except Exception as exc:
-            print(f"Błąd: {exc}")
+            print(f"Error: {exc}")
 
 
 if __name__ == "__main__":

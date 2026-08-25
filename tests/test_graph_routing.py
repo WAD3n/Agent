@@ -91,7 +91,8 @@ def test_reason_forces_final_answer_near_step_limit(mock_get_client):
     reason(state)
 
     _, kwargs = mock_client.chat.completions.create.call_args
-    assert kwargs["tool_choice"] == "none"
+    assert "tools" not in kwargs
+    assert "tool_choice" not in kwargs
 
 
 # --- call_tools ---------------------------------------------------------------

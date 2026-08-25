@@ -20,18 +20,33 @@ SYSTEM_PROMPT = (
 class AgentState(TypedDict):
     messages: list[dict]
     steps: int
+    prompt_tokens: int
+    completion_tokens: int
+
+
+def _extract_usage(response) -> tuple[int, int]:
+    usage = getattr(response, "usage", None)
+    try:
+        return int(usage.prompt_tokens), int(usage.completion_tokens)
+    except (AttributeError, TypeError):
+        return 0, 0
 
 
 def reason(state: AgentState) -> AgentState:
     client = get_groq_client()
     force_final_answer = state["steps"] >= MAX_STEPS - 1
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=cast(Any, state["messages"]),
-        tools=cast(Any, TOOL_SCHEMAS),
-        tool_choice="none" if force_final_answer else "auto",
-    )
+
+    kwargs: dict = {"model": MODEL, "messages": cast(Any, state["messages"])}
+    if not force_final_answer:
+        # Omit `tools` entirely when forcing a final answer: passing
+        # tool_choice="none" alongside `tools` still lets the model attempt a
+        # tool call on Groq, which the API then rejects with a 400.
+        kwargs["tools"] = cast(Any, TOOL_SCHEMAS)
+        kwargs["tool_choice"] = "auto"
+
+    response = client.chat.completions.create(**kwargs)
     message = response.choices[0].message
+    prompt_tokens, completion_tokens = _extract_usage(response)
 
     assistant_message: dict = {"role": "assistant", "content": message.content or ""}
     if message.tool_calls:
@@ -51,6 +66,8 @@ def reason(state: AgentState) -> AgentState:
     return {
         "messages": state["messages"] + [assistant_message],
         "steps": state["steps"] + 1,
+        "prompt_tokens": state.get("prompt_tokens", 0) + prompt_tokens,
+        "completion_tokens": state.get("completion_tokens", 0) + completion_tokens,
     }
 
 
@@ -104,5 +121,7 @@ def run_agent(question: str) -> AgentState:
             {"role": "user", "content": question},
         ],
         "steps": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
     }
     return cast(AgentState, app.invoke(initial_state))
