@@ -15,7 +15,9 @@ Szacowany nakład: 2 tygodnie po godzinach (10-14 wieczorów pracy).
   3 narzędziach (prosta pętla function-calling by wystarczyła), tylko dlatego że
   "LangGraph" to dosłowne słowo kluczowe, które pojawiało się w ofertach pracy, które
   przeglądaliśmy — warto mieć je w repo i w CV.
-- **LLM: Groq**, darmowe, natywnie wspiera tool-use/function-calling (Llama 3.3 70B).
+- **LLM: Groq**, darmowe, natywnie wspiera tool-use/function-calling. Model:
+  `openai/gpt-oss-120b` (Llama 3.3 70B niedostępny na tym koncie Groq — sprawdzone
+  przez `client.models.list()`).
   [console.groq.com/docs/tool-use](https://console.groq.com/docs/tool-use/overview)
 - **Wyszukiwanie: Tavily** — darmowy tier, 1000 kredytów/miesiąc odnawialnych
   (nie jednorazowo), bez karty. Wystarczy na ~200 sesji demo miesięcznie.
