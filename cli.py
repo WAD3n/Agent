@@ -1,6 +1,7 @@
 import sys
 
-from agent.graph import SYSTEM_PROMPT, build_graph
+from agent.graph import build_graph
+from agent.trace import stream_steps
 
 STEP_LABELS = {
     "reason": "REASON",
@@ -30,24 +31,11 @@ def print_step(node_name: str, message: dict, step_number: int) -> None:
 
 
 def run_with_trace(app, question: str) -> None:
-    state = {
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": question},
-        ],
-        "steps": 0,
-    }
-
-    seen = len(state["messages"])
     step_number = 0
-
-    for update in app.stream(state, stream_mode="updates"):
-        for node_name, node_state in update.items():
-            messages = node_state["messages"]
-            for message in messages[seen:]:
-                step_number += 1
-                print_step(node_name, message, step_number)
-            seen = len(messages)
+    for node_name, new_messages, _ in stream_steps(app, question):
+        for message in new_messages:
+            step_number += 1
+            print_step(node_name, message, step_number)
 
 
 def main() -> None:
