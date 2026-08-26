@@ -8,7 +8,7 @@ to search the web, use a calculator, or answer directly — with a measured
 evaluation layer (accuracy, steps, token cost, latency) instead of just a demo
 that "works."
 
-> Live demo: _not deployed yet_
+> Live demo: [agentappdemo.streamlit.app](https://agentappdemo.streamlit.app/)
 
 ## How it works
 
